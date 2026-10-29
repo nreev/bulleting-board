@@ -142,10 +142,6 @@
                 </select>
             </div>
 
-            <button id="refreshBtn" title="Refresh Board Data" class="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg border border-slate-200 transition">
-                <i class="fa-solid fa-rotate text-sm"></i>
-            </button>
-
             <button id="clearAllBtn" title="Clear All Unpinned Notes" class="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg border border-slate-200 transition">
                 <i class="fa-solid fa-trash-can text-sm"></i>
             </button>
@@ -206,30 +202,21 @@
         let searchQuery = '';
         let highestZIndex = 100;
 
-        let board, addNoteBtn, searchInput, clearSearchBtn, boardThemeSelect, dynamicTagsContainer, totalNotesCount, emptyState, clearAllBtn, filterAllBtn, refreshBtn;
+        const board = document.getElementById('board');
+        const addNoteBtn = document.getElementById('addNoteBtn');
+        const searchInput = document.getElementById('searchInput');
+        const clearSearchBtn = document.getElementById('clearSearch');
+        const boardThemeSelect = document.getElementById('boardThemeSelect');
+        const dynamicTagsContainer = document.getElementById('dynamicTags');
+        const totalNotesCount = document.getElementById('totalNotesCount');
+        const emptyState = document.getElementById('emptyState');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const filterAllBtn = document.getElementById('filterAllBtn');
 
-        function initApp() {
-            board = document.getElementById('board');
-            addNoteBtn = document.getElementById('addNoteBtn');
-            searchInput = document.getElementById('searchInput');
-            clearSearchBtn = document.getElementById('clearSearch');
-            boardThemeSelect = document.getElementById('boardThemeSelect');
-            dynamicTagsContainer = document.getElementById('dynamicTags');
-            totalNotesCount = document.getElementById('totalNotesCount');
-            emptyState = document.getElementById('emptyState');
-            clearAllBtn = document.getElementById('clearAllBtn');
-            filterAllBtn = document.getElementById('filterAllBtn');
-            refreshBtn = document.getElementById('refreshBtn');
-
-            setupEventListeners();
+        window.addEventListener('DOMContentLoaded', () => {
             listenToFirebase();
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initApp);
-        } else {
-            initApp();
-        }
+            setupEventListeners();
+        });
 
         function listenToFirebase() {
             dbRef.on('value', (snapshot) => {
@@ -256,23 +243,6 @@
 
         function setupEventListeners() {
             addNoteBtn.addEventListener('click', () => createNote());
-
-            refreshBtn.addEventListener('click', () => {
-                dbRef.once('value').then((snapshot) => {
-                    const data = snapshot.val();
-                    if (data) {
-                        notes = data.notes || [];
-                        if (data.theme) {
-                            boardThemeSelect.value = data.theme;
-                            setBoardTheme(data.theme);
-                        }
-                    }
-                    renderBoard();
-                    showToast('Board refreshed!');
-                }).catch(() => {
-                    showToast('Refresh failed. Check connection.');
-                });
-            });
 
             document.addEventListener('click', (e) => {
                 if (!e.target.closest('.color-picker-container')) closeAllColorPickers();
@@ -616,4 +586,39 @@
         function showToast(message) {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
-            toast.className = 'bg-slate-900/90 text-white text-xs px-3 py-2 rounded-lg shadow-
+            toast.className = 'bg-slate-900/90 text-white text-xs px-3 py-2 rounded-lg shadow-lg flex items-center space-x-2 transition-all duration-300 transform translate-y-2 opacity-0';
+            toast.innerHTML = `<i class="fa-solid fa-circle-check text-amber-400"></i> <span>${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        function loadDefaultNotes() {
+            notes = [
+                {
+                    id: 'note_default_1',
+                    title: 'Shared Bulletin Board 📌',
+                    content: 'Any note added or modified here syncs live to all visitors on any device!',
+                    tag: 'Welcome',
+                    colorIndex: 0,
+                    x: 80,
+                    y: 80,
+                    width: 250,
+                    height: 220,
+                    isPinned: true,
+                    rotation: 0,
+                    zIndex: 10
+                }
+            ];
+            saveToStorage();
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

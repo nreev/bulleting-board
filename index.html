@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Digital Bulletin Board</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        handwriting: ['Caveat', 'cursive'],
+                    },
+                    colors: {
+                        cork: '#d4a373',
+                        corkDark: '#bc8a5f',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Background Patterns */
+        .bg-cork-pattern {
+            background-color: #d4a373;
+            background-image: radial-gradient(#bb8552 1.5px, transparent 1.5px), radial-gradient(#bb8552 1.5px, #d4a373 1.5px);
+            background-size: 60px 60px;
+            background-position: 0 0, 30px 30px;
+        }
+
+        .bg-grid-pattern {
+            background-color: #f8fafc;
+            background-image: linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        .bg-dark-pattern {
+            background-color: #0f172a;
+            background-image: linear-gradient(#1e293b 1px, transparent 1px), linear-gradient(90deg, #1e293b 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        /* Note Shadows & Pin Effect */
+        .sticky-note {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.08);
+            transition: box-shadow 0.2s ease, transform 0.1s ease;
+            touch-action: none;
+        }
+
+        .sticky-note:hover {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
+        }
+
+        .sticky-note.dragging {
+            opacity: 0.92;
+            transform: scale(1.02) rotate(0deg) !important;
+            box-shadow: 0 25px 30px -5px rgba(0, 0, 0, 0.3);
+            z-index: 9999 !important;
+            cursor: grabbing !important;
+        }
+
+        .push-pin {
+            filter: drop-shadow(2px 3px 2px rgba(0,0,0,0.3));
+        }
+
+        /* Custom Scrollbar for Note Editor */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.15);
+            border-radius: 4px;
+        }
+
+        /* Color Picker Popover Animation */
+        .color-popover.hidden {
+            display: none !important;
+        }
+
+        /* Note Resize Handle Style */
+        .resize-handle {
+            position: absolute;
+            right: 4px;
+            bottom: 4px;
+            width: 14px;
+            height: 14px;
+            cursor: se-resize;
+            opacity: 0.4;
+            transition: opacity 0.2s ease;
+        }
+        .resize-handle:hover {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col font-sans select-none antialiased bg-slate-900">
+
+    <!-- Top Navigation / Controls Bar -->
+    <header class="bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3 z-30 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <!-- Logo / Title -->
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-amber-500 text-white rounded-xl shadow-md">
+                <i class="fa-solid fa-thumbtack text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg text-slate-800 leading-none">PinBoard Live</h1>
+                <p class="text-xs text-slate-500 font-medium">Interactive Digital Canvas</p>
+            </div>
+        </div>
+
+        <!-- Search and Filter Bar -->
+        <div class="flex items-center flex-1 max-w-md mx-2">
+            <div class="relative w-full">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="searchInput" placeholder="Search title, content, or #tag..." 
+                       class="w-full pl-9 pr-8 py-2 text-sm bg-slate-100 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 transition">
+                <button id="clearSearch" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Action Controls -->
+        <div class="flex items-center space-x-2">
+            <!-- Add Note Button -->
+            <button id="addNoteBtn" class="flex items-center space-x-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition shadow-sm hover:shadow">
+                <i class="fa-solid fa-plus"></i>
+                <span class="hidden sm:inline">Add Note</span>
+            </button>
+
+            <!-- Board Theme Selector -->
+            <div class="relative inline-block text-left">
+                <select id="boardThemeSelect" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm py-2 px-3 rounded-lg border border-slate-200 focus:outline-none cursor-pointer">
+                    <option value="cork">Corkboard</option>
+                    <option value="grid">Clean Grid</option>
+                    <option value="dark">Dark Slate</option>
+                    <option value="minimal">Minimal White</option>
+                </select>
+            </div>
+
+            <!-- Clear All Notes Button -->
+            <button id="clearAllBtn" title="Clear All Unpinned Notes" class="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg border border-slate-200 transition">
+                <i class="fa-solid fa-trash-can text-sm"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Category / Tag Filter Bar -->
+    <div id="tagBar" class="bg-slate-50/90 backdrop-blur border-b border-slate-200 px-4 py-2 flex items-center space-x-2 overflow-x-auto text-xs z-20 custom-scrollbar">
+        <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px] mr-1">Filter Tags:</span>
+        <button id="filterAllBtn" data-tag="all" class="tag-filter-btn px-2.5 py-1 rounded-full bg-slate-800 text-white font-medium shadow-xs">
+            All (<span id="totalNotesCount">0</span>)
+        </button>
+        <div id="dynamicTags" class="flex items-center space-x-1.5">
+            <!-- Dynamic tags populate here -->
+        </div>
+    </div>
+
+    <!-- Main Canvas Board -->
+    <main id="board" class="flex-1 relative overflow-hidden bg-cork-pattern transition-all duration-300">
+        <!-- Empty State Hint -->
+        <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-60">
+            <div class="bg-white/80 backdrop-blur p-6 rounded-2xl shadow-lg text-center max-w-sm mx-4">
+                <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
+                    <i class="fa-solid fa-note-sticky"></i>
+                </div>
+                <h2 class="text-slate-800 font-bold text-lg mb-1">Your Board is Empty</h2>
+                <p class="text-slate-500 text-xs leading-relaxed">Click <strong>"+ Add Note"</strong> above or double-click anywhere on the board to create a sticky note!</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Notification Toast Container -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <script>
+        // Color presets
+        const NOTE_COLORS = [
+            { name: 'yellow', bg: '#fef08a', header: '#fde047', text: '#713f12', border: '#facc15' },
+            { name: 'blue', bg: '#bfdbfe', header: '#93c5fd', text: '#1e3a8a', border: '#60a5fa' },
+            { name: 'green', bg: '#bbf7d0', header: '#86efac', text: '#14532d', border: '#4ade80' },
+            { name: 'pink', bg: '#fbcfe8', header: '#f9a8d4', text: '#831843', border: '#f472b6' },
+            { name: 'purple', bg: '#e9d5ff', header: '#d8b4fe', text: '#581c87', border: '#c084fc' },
+            { name: 'orange', bg: '#fed7aa', header: '#fdba74', text: '#7c2d12', border: '#fb923c' }
+        ];
+
+        const FONT_SIZES = [12, 14, 16, 18, 20, 24];
+        const DEFAULT_FONT_SIZE = 14;
+
+        // Board State
+        let notes = [];
+        let activeFilterTag = 'all';
+        let searchQuery = '';
+        let highestZIndex = 100;
+
+        // DOM Elements
+        const board = document.getElementById('board');
+        const addNoteBtn = document.getElementById('addNoteBtn');
+        const searchInput = document.getElementById('searchInput');
+        const clearSearchBtn = document.getElementById('clearSearch');
+        const boardThemeSelect = document.getElementById('boardThemeSelect');
+        const dynamicTagsContainer = document.getElementById('dynamicTags');
+        const totalNotesCount = document.getElementById('totalNotesCount');
+        const emptyState = document.getElementById('emptyState');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const filterAllBtn = document.getElementById('filterAllBtn');
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromLocalStorage();
+            renderBoard();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            addNoteBtn.addEventListener('click', () => createNote());
+
+            // Global dismiss color popovers
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.color-picker-container')) {
+                    closeAllColorPickers();
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeAllColorPickers();
+                }
+            });
+
+            // Double click to spawn new note
+            board.addEventListener('dblclick', (e) => {
+                if (e.target === board) {
+                    const rect = board.getBoundingClientRect();
+                    const x = e.clientX - rect.left - 110;
+                    const y = e.clientY - rect.top - 100;
+                    createNote(x, y);
+                }
+            });
+
+            // Live Search Input
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value.toLowerCase().trim();
+                clearSearchBtn.classList.toggle('hidden', searchQuery === '');
+                renderBoard();
+            });
+
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchQuery = '';
+                clearSearchBtn.classList.add('hidden');
+                renderBoard();
+            });
+
+            filterAllBtn.addEventListener('click', () => {
+                activeFilterTag = 'all';
+                renderBoard();
+            });
+
+            // Theme Change
+            boardThemeSelect.addEventListener('change', (e) => {
+                setBoardTheme(e.target.value);
+                saveToLocalStorage();
+            });
+
+            // Clear unpinned notes
+            clearAllBtn.addEventListener('click', () => {
+                const unpinnedCount = notes.filter(n => !n.isPinned).length;
+                if (unpinnedCount === 0) {
+                    showToast('No unpinned notes to delete!');
+                    return;
+                }
+                if (confirm(`Are you sure you want to delete all ${unpinnedCount} unpinned notes?`)) {
+                    notes = notes.filter(n => n.isPinned);
+                    saveToLocalStorage();
+                    renderBoard();
+                    showToast(`Deleted ${unpinnedCount} unpinned notes`);
+                }
+            });
+        }
+
+        function setBoardTheme(theme) {
+            board.className = 'flex-1 relative overflow-hidden transition-all duration-300 ';
+            switch (theme) {
+                case 'grid':
+                    board.classList.add('bg-grid-pattern');
+                    break;
+                case 'dark':
+                    board.classList.add('bg-dark-pattern');
+                    break;
+                case 'minimal':
+                    board.classList.add('bg-slate-100');
+                    break;
+                case 'cork':
+                default:
+                    board.classList.add('bg-cork-pattern');
+                    break;
+            }
+        }
+
+        function createNote(x = null, y = null) {
+            const boardRect = board.getBoundingClientRect();
+            const defaultX = Math.max(20, (boardRect.width / 2 - 120) + (Math.random() * 60 - 30));
+            const defaultY = Math.max(20, (boardRect.height / 2 - 110) + (Math.random() * 60 - 30));
+
+            const newNote = {
+                id: 'note_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                title: 'New Note',
+                content: 'Click here to start typing your note...',
+                tag: 'General',
+                colorIndex: Math.floor(Math.random() * NOTE_COLORS.length),
+                fontSize: DEFAULT_FONT_SIZE,
+                x: x !== null ? Math.max(10, Math.min(x, boardRect.width - 240)) : defaultX,
+                y: y !== null ? Math.max(10, Math.min(y, boardRect.height - 220)) : defaultY,
+                width: 240,
+                height: 220,
+                isPinned: false,
+                rotation: Math.floor(Math.random() * 8) - 4,
+                zIndex: ++highestZIndex
+            };
+
+            notes.push(newNote);
+            saveToLocalStorage();
+            renderBoard();
+            showToast('New note created!');
+        }
+
+        function renderBoard() {
+            emptyState.style.display = notes.length === 0 ? 'flex' : 'none';
+            totalNotesCount.textContent = notes.length;
+
+            const existingDOMNotes = board.querySelectorAll('.sticky-note');
+            existingDOMNotes.forEach(el => el.remove());
+
+            renderTagFilters();
+
+            const filteredNotes = notes.filter(note => {
+                const matchesTag = activeFilterTag === 'all' || note.tag.toLowerCase() === activeFilterTag.toLowerCase();
+                const q = searchQuery;
+                const matchesSearch = !q || 
+                    (note.title && note.title.toLowerCase().includes(q)) ||
+                    (note.content && note.content.toLowerCase().includes(q)) || 
+                    (note.tag && note.tag.toLowerCase().includes(q));
+                return matchesTag && matchesSearch;
+            });
+
+            filteredNotes.forEach(note => {
+                const noteElement = createNoteDOMElement(note);
+                board.appendChild(noteElement);
+            });
+        }
+
+        function createNoteDOMElement(note) {
+            const colorScheme = NOTE_COLORS[note.colorIndex] || NOTE_COLORS[0];
+            const currentFontSize = note.fontSize || DEFAULT_FONT_SIZE;
+            const noteEl = document.createElement('div');
+            
+            noteEl.id = note.id;
+            noteEl.className = `sticky-note absolute flex flex-col rounded-xl p-3 border transition-transform duration-75 select-none`;
+            noteEl.style.backgroundColor = colorScheme.bg;
+            noteEl.style.borderColor = colorScheme.border;
+            noteEl.style.left = `${note.x}px`;
+            noteEl.style.top = `${note.y}px`;
+            noteEl.style.width = `${note.width || 240}px`;
+            noteEl.style.height = `${note.height || 220}px`;
+            noteEl.style.zIndex = note.zIndex || 1;
+            noteEl.style.transform = `rotate(${note.isPinned ? 0 : note.rotation}deg)`;
+
+            noteEl.innerHTML = `
+                <!-- Top Header / Controls -->
+                <div class="note-header flex items-center justify-between pb-2 mb-2 border-b border-black/10 cursor-grab">
+                    <!-- Pin Toggle Button -->
+                    <button class="pin-btn text-xs font-bold px-1.5 py-1 rounded transition ${note.isPinned ? 'text-red-600 bg-red-100' : 'text-slate-500 hover:text-slate-800'}" title="${note.isPinned ? 'Unpin Note' : 'Pin Note in Place'}">
+                        <i class="fa-solid fa-thumbtack push-pin ${note.isPinned ? 'rotate-45 text-red-500' : 'opacity-60'}"></i>
+                    </button>
+
+                    <!-- Font Size Selector Controls -->
+                    <div class="flex items-center space-x-1 bg-black/5 px-1.5 py-0.5 rounded-lg border border-black/5">
+                        <button class="font-decrease-btn text-[11px] font-bold text-slate-600 hover:text-slate-900 px-1 hover:bg-black/10 rounded transition" title="Decrease Font Size">
+                            A-
+                        </button>
+                        <select class="font-size-select text-[10px] bg-transparent font-semibold text-slate-700 focus:outline-none cursor-pointer">
+                            ${FONT_SIZES.map(size => `
+                                <option value="${size}" ${size === currentFontSize ? 'selected' : ''}>${size}px</option>
+                            `).join('')}
+                        </select>
+                        <button class="font-increase-btn text-[11px] font-bold text-slate-600 hover:text-slate-900 px-1 hover:bg-black/10 rounded transition" title="Increase Font Size">
+                            A+
+                        </button>
+                    </div>
+
+                    <!-- Color Picker Button Popover -->
+                    <div class="relative color-picker-container">
+                        <button class="color-picker-toggle w-5 h-5 rounded-full border border-black/20 shadow-xs flex items-center justify-center hover:scale-105 active:scale-95 transition focus:outline-none focus:ring-2 focus:ring-amber-500" 
+                                style="background-color: ${colorScheme.header}" 
+                                title="Change note color">
+                            <i class="fa-solid fa-palette text-[9px] opacity-70"></i>
+                        </button>
+                        <div class="color-popover hidden absolute right-0 top-7 bg-white p-2 rounded-xl shadow-2xl border border-slate-200 z-50 flex items-center space-x-1.5">
+                            ${NOTE_COLORS.map((c, idx) => `
+                                <button data-color-idx="${idx}" 
+                                        class="color-select-btn w-5 h-5 rounded-full border border-black/15 hover:scale-115 active:scale-95 transition focus:outline-none focus:ring-2 focus:ring-slate-400 ${idx === note.colorIndex ? 'ring-2 ring-slate-800 scale-110' : ''}" 
+                                        style="background-color: ${c.bg}" 
+                                        title="${c.name}"></button>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Delete Button -->
+                    <button class="delete-btn text-slate-400 hover:text-red-600 p-1 transition" title="Delete Note">
+                        <i class="fa-solid fa-xmark text-sm"></i>
+                    </button>
+                </div>
+
+                <!-- Editable Note Title Input -->
+                <input type="text" class="note-title-input font-bold bg-transparent outline-none border-b border-black/10 pb-1 mb-2 text-slate-800 placeholder-slate-400/80" 
+                       value="${escapeHtml(note.title || '')}" 
+                       placeholder="Note Title..." />
+
+                <!-- Editable Note Content Area -->
+                <textarea class="note-content flex-1 bg-transparent resize-none outline-none font-medium leading-relaxed custom-scrollbar text-slate-700" 
+                          placeholder="Type content here..." 
+                          style="font-size: ${currentFontSize}px;">${escapeHtml(note.content || '')}</textarea>
+
+                <!-- Footer Tag & Corner Resize Handle -->
+                <div class="mt-2 pt-1 border-t border-black/5 flex items-center justify-between text-xs relative">
+                    <div class="flex items-center space-x-1">
+                        <i class="fa-solid fa-tag text-[10px] opacity-50"></i>
+                        <input type="text" class="note-tag-input font-semibold opacity-70 focus:opacity-100 bg-transparent outline-none w-24 text-slate-700" 
+                               value="${escapeHtml(note.tag || 'General')}" 
+                               placeholder="Tag..." />
+                    </div>
+                    <!-- Corner Drag Resize Handle -->
+                    <div class="resize-handle cursor-se-resize p-1 -mr-1 -mb-1 opacity-40 hover:opacity-100 text-slate-600" title="Drag to resize">
+                        <i class="fa-solid fa-up-right-and-down-left-from-center rotate-90 text-[10px]"></i>
+                    </div>
+                </div>
+            `;
+
+            setupNoteInteractions(noteEl, note);
+            return noteEl;
+        }
+
+        function closeAllColorPickers() {
+            document.querySelectorAll('.color-popover').forEach(pop => {
+                pop.classList.add('hidden');
+            });
+        }
+
+        function setupNoteInteractions(el, note) {
+            const pinBtn = el.querySelector('.pin-btn');
+            const deleteBtn = el.querySelector('.delete-btn');
+            const titleInput = el.querySelector('.note-title-input');
+            const contentArea = el.querySelector('.note-content');
+            const tagInput = el.querySelector('.note-tag-input');
+            const colorToggleBtn = el.querySelector('.color-picker-toggle');
+            const colorPopover = el.querySelector('.color-popover');
+            const colorBtns = el.querySelectorAll('.color-select-btn');
+            const fontDecreaseBtn = el.querySelector('.font-decrease-btn');
+            const fontIncreaseBtn = el.querySelector('.font-increase-btn');
+            const fontSizeSelect = el.querySelector('.font-size-select');
+            const resizeHandle = el.querySelector('.resize-handle');
+
+            // Bring note to front on interaction
+            el.addEventListener('mousedown', () => {
+                note.zIndex = ++highestZIndex;
+                el.style.zIndex = note.zIndex;
+            });
+
+            // Font size changes
+            function updateFontSize(newSize) {
+                const clampedSize = Math.max(FONT_SIZES[0], Math.min(FONT_SIZES[FONT_SIZES.length - 1], newSize));
+                note.fontSize = clampedSize;
+                contentArea.style.fontSize = `${clampedSize}px`;
+                fontSizeSelect.value = clampedSize;
+                saveToLocalStorage();
+            }
+
+            fontDecreaseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const currentSize = note.fontSize || DEFAULT_FONT_SIZE;
+                const prevSize = FONT_SIZES.filter(s => s < currentSize).pop() || FONT_SIZES[0];
+                updateFontSize(prevSize);
+            });
+
+            fontIncreaseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const currentSize = note.fontSize || DEFAULT_FONT_SIZE;
+                const nextSize = FONT_SIZES.find(s => s > currentSize) || FONT_SIZES[FONT_SIZES.length - 1];
+                updateFontSize(nextSize);
+            });
+
+            fontSizeSelect.addEventListener('change', (e) => {
+                e.stopPropagation();
+                updateFontSize(parseInt(e.target.value));
+            });
+
+            fontSizeSelect.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            // Toggle color picker popover
+            colorToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isHidden = colorPopover.classList.contains('hidden');
+                closeAllColorPickers();
+                if (isHidden) {
+                    colorPopover.classList.remove('hidden');
+                }
+            });
+
+            colorBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    note.colorIndex = parseInt(btn.dataset.colorIdx);
+                    saveToLocalStorage();
+                    renderBoard();
+                });
+            });
+
+            // Direct Note Text Field Events
+            titleInput.addEventListener('input', () => {
+                note.title = titleInput.value;
+                saveToLocalStorage();
+            });
+
+            contentArea.addEventListener('input', () => {
+                note.content = contentArea.value;
+                saveToLocalStorage();
+            });
+
+            tagInput.addEventListener('input', () => {
+                note.tag = tagInput.value.replace('#', '').trim();
+                saveToLocalStorage();
+            });
+
+            tagInput.addEventListener('blur', () => {
+                if (!note.tag) note.tag = 'General';
+                renderBoard();
+            });
+
+            // Smooth Dragging Mechanics
+            let isDragging = false;
+            let startX, startY, initialLeft, initialTop;
+
+            el.addEventListener('mousedown', (e) => {
+                if (note.isPinned) return;
+                
+                // Exclude dragging when interacting with editable input controls or buttons
+                const interactiveTags = ['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT', 'I', 'OPTION'];
+                if (interactiveTags.includes(e.target.tagName) || e.target.closest('.resize-handle') || e.target.closest('.color-popover')) {
+                    return;
+                }
+
+                isDragging = true;
+                el.classList.add('dragging');
+                
+                startX = e.clientX;
+                startY = e.clientY;
+                initialLeft = note.x;
+                initialTop = note.y;
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+            });
+
+            function onMouseMove(e) {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+
+                note.x = Math.max(0, Math.min(board.clientWidth - el.offsetWidth, initialLeft + dx));
+                note.y = Math.max(0, Math.min(board.clientHeight - el.offsetHeight, initialTop + dy));
+
+                el.style.left = `${note.x}px`;
+                el.style.top = `${note.y}px`;
+            }
+
+            function onMouseUp() {
+                if (isDragging) {
+                    isDragging = false;
+                    el.classList.remove('dragging');
+                    saveToLocalStorage();
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                }
+            }
+
+            // Resizing Mechanics
+            let isResizing = false;
+            let startWidth, startHeight, startResizeX, startResizeY;
+
+            resizeHandle.addEventListener('mousedown', (e) => {
+                if (note.isPinned) return;
+                e.stopPropagation();
+
+                isResizing = true;
+                startWidth = el.offsetWidth;
+                startHeight = el.offsetHeight;
+                startResizeX = e.clientX;
+                startResizeY = e.clientY;
+
+                window.addEventListener('mousemove', onResizeMove);
+                window.addEventListener('mouseup', onResizeUp);
+            });
+
+            function onResizeMove(e) {
+                if (!isResizing) return;
+                const newWidth = Math.max(180, Math.min(500, startWidth + (e.clientX - startResizeX)));
+                const newHeight = Math.max(160, Math.min(500, startHeight + (e.clientY - startResizeY)));
+
+                note.width = newWidth;
+                note.height = newHeight;
+                el.style.width = `${newWidth}px`;
+                el.style.height = `${newHeight}px`;
+            }
+
+            function onResizeUp() {
+                if (isResizing) {
+                    isResizing = false;
+                    saveToLocalStorage();
+                    window.removeEventListener('mousemove', onResizeMove);
+                    window.removeEventListener('mouseup', onResizeUp);
+                }
+            }
+
+            // Pin Button Toggle
+            pinBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                note.isPinned = !note.isPinned;
+                saveToLocalStorage();
+                renderBoard();
+                showToast(note.isPinned ? 'Note pinned in place' : 'Note unpinned');
+            });
+
+            // Delete Note
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                notes = notes.filter(n => n.id !== note.id);
+                saveToLocalStorage();
+                renderBoard();
+                showToast('Note deleted');
+            });
+        }
+
+        function renderTagFilters() {
+            const tagCounts = {};
+            notes.forEach(note => {
+                const tag = (note.tag || 'General').trim();
+                if (tag) tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+            });
+
+            dynamicTagsContainer.innerHTML = '';
+
+            Object.keys(tagCounts).forEach(tag => {
+                const isSelected = activeFilterTag.toLowerCase() === tag.toLowerCase();
+                const btn = document.createElement('button');
+                btn.className = `tag-filter-btn px-2.5 py-1 rounded-full font-medium transition ${
+                    isSelected 
+                        ? 'bg-amber-500 text-white shadow-xs' 
+                        : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                }`;
+                btn.innerHTML = `#${escapeHtml(tag)} <span class="opacity-60 text-[10px]">(${tagCounts[tag]})</span>`;
+                
+                btn.addEventListener('click', () => {
+                    activeFilterTag = isSelected ? 'all' : tag;
+                    renderBoard();
+                });
+
+                dynamicTagsContainer.appendChild(btn);
+            });
+
+            // Highlight All button if active
+            if (activeFilterTag === 'all') {
+                filterAllBtn.className = 'tag-filter-btn px-2.5 py-1 rounded-full bg-slate-800 text-white font-medium shadow-xs';
+            } else {
+                filterAllBtn.className = 'tag-filter-btn px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 font-medium';
+            }
+        }
+
+        function showToast(message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'bg-slate-900/90 text-white text-xs px-3 py-2 rounded-lg shadow-lg flex items-center space-x-2 transition-all duration-300 transform translate-y-2 opacity-0';
+            toast.innerHTML = `<i class="fa-solid fa-circle-check text-amber-400"></i> <span>${escapeHtml(message)}</span>`;
+            
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        function saveToLocalStorage() {
+            const boardData = {
+                notes: notes,
+                theme: boardThemeSelect.value
+            };
+            localStorage.setItem('digital_bulletin_board', JSON.stringify(boardData));
+        }
+
+        function loadFromLocalStorage() {
+            const savedData = localStorage.getItem('digital_bulletin_board');
+            if (savedData) {
+                try {
+                    const parsed = JSON.parse(savedData);
+                    notes = parsed.notes || [];
+                    if (parsed.theme) {
+                        boardThemeSelect.value = parsed.theme;
+                        setBoardTheme(parsed.theme);
+                    }
+                } catch (e) {
+                    console.error('Failed to parse local storage data', e);
+                }
+            } else {
+                notes = [
+                    {
+                        id: 'note_default_1',
+                        title: 'Welcome Note 📌',
+                        content: '- Drag note background to move anywhere\n- Resize with bottom-right corner\n- Double-click empty canvas to add a new note',
+                        tag: 'Getting Started',
+                        colorIndex: 0,
+                        x: 80,
+                        y: 80,
+                        width: 250,
+                        height: 220,
+                        isPinned: false,
+                        rotation: -2,
+                        zIndex: 10
+                    },
+                    {
+                        id: 'note_default_2',
+                        title: 'Organization Tips 💡',
+                        content: 'Categorize your sticky notes with tags like #Ideas or #Work to filter notes with top toolbar pills.',
+                        tag: 'Ideas',
+                        colorIndex: 1,
+                        x: 360,
+                        y: 100,
+                        width: 240,
+                        height: 200,
+                        isPinned: false,
+                        rotation: 2,
+                        zIndex: 11
+                    }
+                ];
+                saveToLocalStorage();
+            }
+        }
+
+        function escapeHtml(str) {
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

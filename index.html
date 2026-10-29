@@ -171,6 +171,7 @@
     <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
     <script>
+        // Your Firebase Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAY7TZZ-SdPG2JIU7UtVeu_3kcqp6R3UD0",
             authDomain: "bulletin-board-c68de.firebaseapp.com",
@@ -182,6 +183,7 @@
             measurementId: "G-S3C0FPL4JV"
         };
 
+        // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const dbRef = firebase.database().ref('bulletin_board');
 
@@ -202,8 +204,158 @@
         let searchQuery = '';
         let highestZIndex = 100;
 
-        let board, addNoteBtn, searchInput, clearSearchBtn, boardThemeSelect, dynamicTagsContainer, totalNotesCount, emptyState, clearAllBtn, filterAllBtn;
+        const board = document.getElementById('board');
+        const addNoteBtn = document.getElementById('addNoteBtn');
+        const searchInput = document.getElementById('searchInput');
+        const clearSearchBtn = document.getElementById('clearSearch');
+        const boardThemeSelect = document.getElementById('boardThemeSelect');
+        const dynamicTagsContainer = document.getElementById('dynamicTags');
+        const totalNotesCount = document.getElementById('totalNotesCount');
+        const emptyState = document.getElementById('emptyState');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const filterAllBtn = document.getElementById('filterAllBtn');
 
-        function initApp() {
-            board = document.getElementById('board');
-            addNoteBtn = document
+        window.addEventListener('DOMContentLoaded', () => {
+            listenToFirebase();
+            setupEventListeners();
+        });
+
+        function listenToFirebase() {
+            dbRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    notes = data.notes || [];
+                    if (data.theme) {
+                        boardThemeSelect.value = data.theme;
+                        setBoardTheme(data.theme);
+                    }
+                } else {
+                    loadDefaultNotes();
+                }
+                renderBoard();
+            });
+        }
+
+        function saveToStorage() {
+            dbRef.set({
+                notes: notes,
+                theme: boardThemeSelect.value
+            });
+        }
+
+        function setupEventListeners() {
+            addNoteBtn.addEventListener('click', () => createNote());
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.color-picker-container')) closeAllColorPickers();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeAllColorPickers();
+            });
+
+            board.addEventListener('dblclick', (e) => {
+                if (e.target === board) {
+                    const rect = board.getBoundingClientRect();
+                    createNote(e.clientX - rect.left - 110, e.clientY - rect.top - 100);
+                }
+            });
+
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value.toLowerCase().trim();
+                clearSearchBtn.classList.toggle('hidden', searchQuery === '');
+                renderBoard();
+            });
+
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchQuery = '';
+                clearSearchBtn.classList.add('hidden');
+                renderBoard();
+            });
+
+            filterAllBtn.addEventListener('click', () => {
+                activeFilterTag = 'all';
+                renderBoard();
+            });
+
+            boardThemeSelect.addEventListener('change', (e) => {
+                setBoardTheme(e.target.value);
+                saveToStorage();
+            });
+
+            clearAllBtn.addEventListener('click', () => {
+                const unpinnedCount = notes.filter(n => !n.isPinned).length;
+                if (unpinnedCount === 0) return showToast('No unpinned notes to delete!');
+                if (confirm(`Delete all ${unpinnedCount} unpinned notes for everyone?`)) {
+                    notes = notes.filter(n => n.isPinned);
+                    saveToStorage();
+                    showToast(`Deleted ${unpinnedCount} unpinned notes`);
+                }
+            });
+        }
+
+        function setBoardTheme(theme) {
+            board.className = 'flex-1 relative overflow-hidden transition-all duration-300 ';
+            if (theme === 'grid') board.classList.add('bg-grid-pattern');
+            else if (theme === 'dark') board.classList.add('bg-dark-pattern');
+            else if (theme === 'minimal') board.classList.add('bg-slate-100');
+            else board.classList.add('bg-cork-pattern');
+        }
+
+        function createNote(x = null, y = null) {
+            const boardRect = board.getBoundingClientRect();
+            const defaultX = Math.max(20, (boardRect.width / 2 - 120) + (Math.random() * 60 - 30));
+            const defaultY = Math.max(20, (boardRect.height / 2 - 110) + (Math.random() * 60 - 30));
+
+            const newNote = {
+                id: 'note_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                title: 'New Note',
+                content: 'Click here to start typing...',
+                tag: 'General',
+                colorIndex: Math.floor(Math.random() * NOTE_COLORS.length),
+                fontSize: DEFAULT_FONT_SIZE,
+                x: x !== null ? Math.max(10, Math.min(x, boardRect.width - 240)) : defaultX,
+                y: y !== null ? Math.max(10, Math.min(y, boardRect.height - 220)) : defaultY,
+                width: 240,
+                height: 220,
+                isPinned: false,
+                rotation: Math.floor(Math.random() * 8) - 4,
+                zIndex: ++highestZIndex
+            };
+
+            notes.push(newNote);
+            saveToStorage();
+            showToast('New note created!');
+        }
+
+        function renderBoard() {
+            emptyState.style.display = notes.length === 0 ? 'flex' : 'none';
+            totalNotesCount.textContent = notes.length;
+
+            board.querySelectorAll('.sticky-note').forEach(el => el.remove());
+            renderTagFilters();
+
+            const filteredNotes = notes.filter(note => {
+                const matchesTag = activeFilterTag === 'all' || note.tag.toLowerCase() === activeFilterTag.toLowerCase();
+                const q = searchQuery;
+                const matchesSearch = !q || 
+                    (note.title && note.title.toLowerCase().includes(q)) ||
+                    (note.content && note.content.toLowerCase().includes(q)) || 
+                    (note.tag && note.tag.toLowerCase().includes(q));
+                return matchesTag && matchesSearch;
+            });
+
+            filteredNotes.forEach(note => board.appendChild(createNoteDOMElement(note)));
+        }
+
+        function createNoteDOMElement(note) {
+            const colorScheme = NOTE_COLORS[note.colorIndex] || NOTE_COLORS[0];
+            const currentFontSize = note.fontSize || DEFAULT_FONT_SIZE;
+            const noteEl = document.createElement('div');
+            
+            noteEl.id = note.id;
+            noteEl.className = `sticky-note absolute flex flex-col rounded-xl p-3 border transition-transform duration-75 select-none`;
+            noteEl.style.backgroundColor = colorScheme.bg;
+            noteEl.style.borderColor = colorScheme.border;
+            noteEl.style.left =

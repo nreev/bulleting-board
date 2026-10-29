@@ -202,29 +202,21 @@
         let searchQuery = '';
         let highestZIndex = 100;
 
-        let board, addNoteBtn, searchInput, clearSearchBtn, boardThemeSelect, dynamicTagsContainer, totalNotesCount, emptyState, clearAllBtn, filterAllBtn;
+        const board = document.getElementById('board');
+        const addNoteBtn = document.getElementById('addNoteBtn');
+        const searchInput = document.getElementById('searchInput');
+        const clearSearchBtn = document.getElementById('clearSearch');
+        const boardThemeSelect = document.getElementById('boardThemeSelect');
+        const dynamicTagsContainer = document.getElementById('dynamicTags');
+        const totalNotesCount = document.getElementById('totalNotesCount');
+        const emptyState = document.getElementById('emptyState');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const filterAllBtn = document.getElementById('filterAllBtn');
 
-        function initApp() {
-            board = document.getElementById('board');
-            addNoteBtn = document.getElementById('addNoteBtn');
-            searchInput = document.getElementById('searchInput');
-            clearSearchBtn = document.getElementById('clearSearch');
-            boardThemeSelect = document.getElementById('boardThemeSelect');
-            dynamicTagsContainer = document.getElementById('dynamicTags');
-            totalNotesCount = document.getElementById('totalNotesCount');
-            emptyState = document.getElementById('emptyState');
-            clearAllBtn = document.getElementById('clearAllBtn');
-            filterAllBtn = document.getElementById('filterAllBtn');
-
-            setupEventListeners();
+        window.addEventListener('DOMContentLoaded', () => {
             listenToFirebase();
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initApp);
-        } else {
-            initApp();
-        }
+            setupEventListeners();
+        });
 
         function listenToFirebase() {
             dbRef.on('value', (snapshot) => {

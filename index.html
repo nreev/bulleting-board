@@ -227,4 +227,398 @@
                         boardThemeSelect.value = data.theme;
                         setBoardTheme(data.theme);
                     }
-                } else
+                } else {
+                    loadDefaultNotes();
+                }
+                renderBoard();
+            });
+        }
+
+        function saveToStorage() {
+            dbRef.set({
+                notes: notes,
+                theme: boardThemeSelect.value
+            });
+        }
+
+        function setupEventListeners() {
+            addNoteBtn.addEventListener('click', () => createNote());
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.color-picker-container')) closeAllColorPickers();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeAllColorPickers();
+            });
+
+            board.addEventListener('dblclick', (e) => {
+                if (e.target === board) {
+                    const rect = board.getBoundingClientRect();
+                    createNote(e.clientX - rect.left - 110, e.clientY - rect.top - 100);
+                }
+            });
+
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value.toLowerCase().trim();
+                clearSearchBtn.classList.toggle('hidden', searchQuery === '');
+                renderBoard();
+            });
+
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchQuery = '';
+                clearSearchBtn.classList.add('hidden');
+                renderBoard();
+            });
+
+            filterAllBtn.addEventListener('click', () => {
+                activeFilterTag = 'all';
+                renderBoard();
+            });
+
+            boardThemeSelect.addEventListener('change', (e) => {
+                setBoardTheme(e.target.value);
+                saveToStorage();
+            });
+
+            clearAllBtn.addEventListener('click', () => {
+                const unpinnedCount = notes.filter(n => !n.isPinned).length;
+                if (unpinnedCount === 0) return showToast('No unpinned notes to delete!');
+                if (confirm(`Delete all ${unpinnedCount} unpinned notes for everyone?`)) {
+                    notes = notes.filter(n => n.isPinned);
+                    saveToStorage();
+                    showToast(`Deleted ${unpinnedCount} unpinned notes`);
+                }
+            });
+        }
+
+        function setBoardTheme(theme) {
+            board.className = 'flex-1 relative overflow-hidden transition-all duration-300 ';
+            if (theme === 'grid') board.classList.add('bg-grid-pattern');
+            else if (theme === 'dark') board.classList.add('bg-dark-pattern');
+            else if (theme === 'minimal') board.classList.add('bg-slate-100');
+            else board.classList.add('bg-cork-pattern');
+        }
+
+        function createNote(x = null, y = null) {
+            const boardRect = board.getBoundingClientRect();
+            const defaultX = Math.max(20, (boardRect.width / 2 - 120) + (Math.random() * 60 - 30));
+            const defaultY = Math.max(20, (boardRect.height / 2 - 110) + (Math.random() * 60 - 30));
+
+            const newNote = {
+                id: 'note_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                title: 'New Note',
+                content: 'Click here to start typing...',
+                tag: 'General',
+                colorIndex: Math.floor(Math.random() * NOTE_COLORS.length),
+                fontSize: DEFAULT_FONT_SIZE,
+                x: x !== null ? Math.max(10, Math.min(x, boardRect.width - 240)) : defaultX,
+                y: y !== null ? Math.max(10, Math.min(y, boardRect.height - 220)) : defaultY,
+                width: 240,
+                height: 220,
+                isPinned: false,
+                rotation: Math.floor(Math.random() * 8) - 4,
+                zIndex: ++highestZIndex
+            };
+
+            notes.push(newNote);
+            saveToStorage();
+            showToast('New note created!');
+        }
+
+        function renderBoard() {
+            emptyState.style.display = notes.length === 0 ? 'flex' : 'none';
+            totalNotesCount.textContent = notes.length;
+
+            board.querySelectorAll('.sticky-note').forEach(el => el.remove());
+            renderTagFilters();
+
+            const filteredNotes = notes.filter(note => {
+                const matchesTag = activeFilterTag === 'all' || note.tag.toLowerCase() === activeFilterTag.toLowerCase();
+                const q = searchQuery;
+                const matchesSearch = !q || 
+                    (note.title && note.title.toLowerCase().includes(q)) ||
+                    (note.content && note.content.toLowerCase().includes(q)) || 
+                    (note.tag && note.tag.toLowerCase().includes(q));
+                return matchesTag && matchesSearch;
+            });
+
+            filteredNotes.forEach(note => board.appendChild(createNoteDOMElement(note)));
+        }
+
+        function createNoteDOMElement(note) {
+            const colorScheme = NOTE_COLORS[note.colorIndex] || NOTE_COLORS[0];
+            const currentFontSize = note.fontSize || DEFAULT_FONT_SIZE;
+            const noteEl = document.createElement('div');
+            
+            noteEl.id = note.id;
+            noteEl.className = `sticky-note absolute flex flex-col rounded-xl p-3 border transition-transform duration-75 select-none`;
+            noteEl.style.backgroundColor = colorScheme.bg;
+            noteEl.style.borderColor = colorScheme.border;
+            noteEl.style.left = `${note.x}px`;
+            noteEl.style.top = `${note.y}px`;
+            noteEl.style.width = `${note.width || 240}px`;
+            noteEl.style.height = `${note.height || 220}px`;
+            noteEl.style.zIndex = note.zIndex || 1;
+            noteEl.style.transform = `rotate(${note.isPinned ? 0 : note.rotation}deg)`;
+
+            noteEl.innerHTML = `
+                <div class="note-header flex items-center justify-between pb-2 mb-2 border-b border-black/10 cursor-grab">
+                    <button class="pin-btn text-xs font-bold px-1.5 py-1 rounded transition ${note.isPinned ? 'text-red-600 bg-red-100' : 'text-slate-500 hover:text-slate-800'}">
+                        <i class="fa-solid fa-thumbtack push-pin ${note.isPinned ? 'rotate-45 text-red-500' : 'opacity-60'}"></i>
+                    </button>
+                    <div class="flex items-center space-x-1 bg-black/5 px-1.5 py-0.5 rounded-lg border border-black/5">
+                        <button class="font-decrease-btn text-[11px] font-bold text-slate-600 px-1 hover:bg-black/10 rounded">A-</button>
+                        <select class="font-size-select text-[10px] bg-transparent font-semibold text-slate-700 outline-none">
+                            ${FONT_SIZES.map(s => `<option value="${s}" ${s === currentFontSize ? 'selected' : ''}>${s}px</option>`).join('')}
+                        </select>
+                        <button class="font-increase-btn text-[11px] font-bold text-slate-600 px-1 hover:bg-black/10 rounded">A+</button>
+                    </div>
+                    <div class="relative color-picker-container">
+                        <button class="color-picker-toggle w-5 h-5 rounded-full border border-black/20 shadow-xs flex items-center justify-center hover:scale-105 transition" style="background-color: ${colorScheme.header}">
+                            <i class="fa-solid fa-palette text-[9px] opacity-70"></i>
+                        </button>
+                        <div class="color-popover hidden absolute right-0 top-7 bg-white p-2 rounded-xl shadow-2xl border border-slate-200 z-50 flex items-center space-x-1.5">
+                            ${NOTE_COLORS.map((c, idx) => `
+                                <button data-color-idx="${idx}" class="color-select-btn w-5 h-5 rounded-full border border-black/15 transition ${idx === note.colorIndex ? 'ring-2 ring-slate-800 scale-110' : ''}" style="background-color: ${c.bg}"></button>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <button class="delete-btn text-slate-400 hover:text-red-600 p-1 transition"><i class="fa-solid fa-xmark text-sm"></i></button>
+                </div>
+                <input type="text" class="note-title-input font-bold bg-transparent outline-none border-b border-black/10 pb-1 mb-2 text-slate-800" value="${escapeHtml(note.title || '')}" placeholder="Note Title..." />
+                <textarea class="note-content flex-1 bg-transparent resize-none outline-none font-medium leading-relaxed custom-scrollbar text-slate-700" placeholder="Type content here..." style="font-size: ${currentFontSize}px;">${escapeHtml(note.content || '')}</textarea>
+                <div class="mt-2 pt-1 border-t border-black/5 flex items-center justify-between text-xs relative">
+                    <div class="flex items-center space-x-1">
+                        <i class="fa-solid fa-tag text-[10px] opacity-50"></i>
+                        <input type="text" class="note-tag-input font-semibold opacity-70 bg-transparent outline-none w-24 text-slate-700" value="${escapeHtml(note.tag || 'General')}" placeholder="Tag..." />
+                    </div>
+                    <div class="resize-handle cursor-se-resize p-1 -mr-1 -mb-1 opacity-40 text-slate-600"><i class="fa-solid fa-up-right-and-down-left-from-center rotate-90 text-[10px]"></i></div>
+                </div>
+            `;
+
+            setupNoteInteractions(noteEl, note);
+            return noteEl;
+        }
+
+        function closeAllColorPickers() {
+            document.querySelectorAll('.color-popover').forEach(pop => pop.classList.add('hidden'));
+        }
+
+        function setupNoteInteractions(el, note) {
+            const pinBtn = el.querySelector('.pin-btn');
+            const deleteBtn = el.querySelector('.delete-btn');
+            const titleInput = el.querySelector('.note-title-input');
+            const contentArea = el.querySelector('.note-content');
+            const tagInput = el.querySelector('.note-tag-input');
+            const colorToggleBtn = el.querySelector('.color-picker-toggle');
+            const colorPopover = el.querySelector('.color-popover');
+            const colorBtns = el.querySelectorAll('.color-select-btn');
+            const fontDecreaseBtn = el.querySelector('.font-decrease-btn');
+            const fontIncreaseBtn = el.querySelector('.font-increase-btn');
+            const fontSizeSelect = el.querySelector('.font-size-select');
+            const resizeHandle = el.querySelector('.resize-handle');
+
+            el.addEventListener('mousedown', () => {
+                note.zIndex = ++highestZIndex;
+                el.style.zIndex = note.zIndex;
+            });
+
+            function updateFontSize(newSize) {
+                note.fontSize = Math.max(FONT_SIZES[0], Math.min(FONT_SIZES[FONT_SIZES.length - 1], newSize));
+                contentArea.style.fontSize = `${note.fontSize}px`;
+                fontSizeSelect.value = note.fontSize;
+                saveToStorage();
+            }
+
+            fontDecreaseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                updateFontSize((note.fontSize || DEFAULT_FONT_SIZE) - 2);
+            });
+
+            fontIncreaseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                updateFontSize((note.fontSize || DEFAULT_FONT_SIZE) + 2);
+            });
+
+            fontSizeSelect.addEventListener('change', (e) => {
+                e.stopPropagation();
+                updateFontSize(parseInt(e.target.value));
+            });
+
+            colorToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isHidden = colorPopover.classList.contains('hidden');
+                closeAllColorPickers();
+                if (isHidden) colorPopover.classList.remove('hidden');
+            });
+
+            colorBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    note.colorIndex = parseInt(btn.dataset.colorIdx);
+                    saveToStorage();
+                });
+            });
+
+            titleInput.addEventListener('change', () => {
+                note.title = titleInput.value;
+                saveToStorage();
+            });
+
+            contentArea.addEventListener('change', () => {
+                note.content = contentArea.value;
+                saveToStorage();
+            });
+
+            tagInput.addEventListener('change', () => {
+                note.tag = tagInput.value.replace('#', '').trim() || 'General';
+                saveToStorage();
+            });
+
+            let isDragging = false;
+            let startX, startY, initialLeft, initialTop;
+
+            el.addEventListener('mousedown', (e) => {
+                if (note.isPinned) return;
+                const interactiveTags = ['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT', 'I', 'OPTION'];
+                if (interactiveTags.includes(e.target.tagName) || e.target.closest('.resize-handle') || e.target.closest('.color-popover')) return;
+
+                isDragging = true;
+                el.classList.add('dragging');
+                startX = e.clientX;
+                startY = e.clientY;
+                initialLeft = note.x;
+                initialTop = note.y;
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+            });
+
+            function onMouseMove(e) {
+                if (!isDragging) return;
+                note.x = Math.max(0, Math.min(board.clientWidth - el.offsetWidth, initialLeft + (e.clientX - startX)));
+                note.y = Math.max(0, Math.min(board.clientHeight - el.offsetHeight, initialTop + (e.clientY - startY)));
+                el.style.left = `${note.x}px`;
+                el.style.top = `${note.y}px`;
+            }
+
+            function onMouseUp() {
+                if (isDragging) {
+                    isDragging = false;
+                    el.classList.remove('dragging');
+                    saveToStorage();
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                }
+            }
+
+            let isResizing = false;
+            let startWidth, startHeight, startResizeX, startResizeY;
+
+            resizeHandle.addEventListener('mousedown', (e) => {
+                if (note.isPinned) return;
+                e.stopPropagation();
+                isResizing = true;
+                startWidth = el.offsetWidth;
+                startHeight = el.offsetHeight;
+                startResizeX = e.clientX;
+                startResizeY = e.clientY;
+
+                window.addEventListener('mousemove', onResizeMove);
+                window.addEventListener('mouseup', onResizeUp);
+            });
+
+            function onResizeMove(e) {
+                if (!isResizing) return;
+                note.width = Math.max(180, Math.min(500, startWidth + (e.clientX - startResizeX)));
+                note.height = Math.max(160, Math.min(500, startHeight + (e.clientY - startResizeY)));
+                el.style.width = `${note.width}px`;
+                el.style.height = `${note.height}px`;
+            }
+
+            function onResizeUp() {
+                if (isResizing) {
+                    isResizing = false;
+                    saveToStorage();
+                    window.removeEventListener('mousemove', onResizeMove);
+                    window.removeEventListener('mouseup', onResizeUp);
+                }
+            }
+
+            pinBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                note.isPinned = !note.isPinned;
+                saveToStorage();
+            });
+
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                notes = notes.filter(n => n.id !== note.id);
+                saveToStorage();
+            });
+        }
+
+        function renderTagFilters() {
+            const tagCounts = {};
+            notes.forEach(note => {
+                const tag = (note.tag || 'General').trim();
+                if (tag) tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+            });
+
+            dynamicTagsContainer.innerHTML = '';
+            Object.keys(tagCounts).forEach(tag => {
+                const isSelected = activeFilterTag.toLowerCase() === tag.toLowerCase();
+                const btn = document.createElement('button');
+                btn.className = `tag-filter-btn px-2.5 py-1 rounded-full font-medium transition ${isSelected ? 'bg-amber-500 text-white shadow-xs' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`;
+                btn.innerHTML = `#${escapeHtml(tag)} <span class="opacity-60 text-[10px]">(${tagCounts[tag]})</span>`;
+                btn.addEventListener('click', () => {
+                    activeFilterTag = isSelected ? 'all' : tag;
+                    renderBoard();
+                });
+                dynamicTagsContainer.appendChild(btn);
+            });
+
+            filterAllBtn.className = activeFilterTag === 'all' ? 'tag-filter-btn px-2.5 py-1 rounded-full bg-slate-800 text-white font-medium shadow-xs' : 'tag-filter-btn px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 font-medium';
+        }
+
+        function showToast(message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'bg-slate-900/90 text-white text-xs px-3 py-2 rounded-lg shadow-lg flex items-center space-x-2 transition-all duration-300 transform translate-y-2 opacity-0';
+            toast.innerHTML = `<i class="fa-solid fa-circle-check text-amber-400"></i> <span>${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        function loadDefaultNotes() {
+            notes = [
+                {
+                    id: 'note_default_1',
+                    title: 'Shared Bulletin Board 📌',
+                    content: 'Any note added or modified here syncs live to all visitors on any device!',
+                    tag: 'Welcome',
+                    colorIndex: 0,
+                    x: 80,
+                    y: 80,
+                    width: 250,
+                    height: 220,
+                    isPinned: true,
+                    rotation: 0,
+                    zIndex: 10
+                }
+            ];
+            saveToStorage();
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
